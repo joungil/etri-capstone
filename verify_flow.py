@@ -16,17 +16,15 @@ from typing import Any
 
 
 def _configure_temporary_database() -> tempfile.TemporaryDirectory[str]:
-    """DB와 리포트 내보내기 폴더를 임시 경로로 돌려 실제 작업 결과를 건드리지 않는다."""
+    """DB를 임시 경로로 돌려 실제 작업 결과를 건드리지 않는다."""
 
     directory = tempfile.TemporaryDirectory()
     os.environ["RESEARCH_DB_PATH"] = str(Path(directory.name) / "verify.db")
-    os.environ["REPORT_EXPORT_DIR"] = str(Path(directory.name) / "reports")
     return directory
 
 
 _TEMPORARY_DIRECTORY = _configure_temporary_database()
 
-import report_export  # noqa: E402
 import server  # noqa: E402  (임시 DB 경로를 먼저 지정해야 한다)
 import storage  # noqa: E402
 
@@ -76,63 +74,6 @@ def check(label: str, condition: bool, detail: str = "") -> bool:
 
 def preview(result: dict[str, Any], *keys: str) -> str:
     return ", ".join(f"{key}={result.get(key)!r}" for key in keys)
-
-
-def _table_columns_are_uniform(markdown: str) -> bool:
-    """마크다운 표의 모든 행이 같은 칸 수를 갖는지 본다.
-
-    렌더러가 값 속 `|`를 문자 참조로 바꾸므로 표 행에 남은 `|`는 모두 칸
-    구분자다. 값의 `|`가 그대로 새면 그 행만 칸이 늘어난다.
-    """
-
-    rows = [line for line in markdown.splitlines() if line.startswith("|")]
-    if not rows:
-        return False
-    widths = {len(row.split("|")) for row in rows}
-    return len(widths) == 1
-
-
-def _render_with_hostile_title() -> str:
-    """마크다운 구분자가 들어간 제목·저자로 리포트를 렌더링해 본다.
-
-    OpenAlex 실제 제목에는 드물어 흐름만으로는 지나칠 수 있으므로 직접 만든다.
-    맨 `|`뿐 아니라 수식 표기처럼 이미 이스케이프된 `\\|`도 함께 넣는다.
-    """
-
-    paper = {
-        "openalex_id": "W0000000003",
-        "openalex_url": "https://openalex.org/W0000000003",
-        "title": "Bounding \\|x\\| | Attention Is All You Need\nSecond line",
-        "publication_year": 2017,
-        "authors": ["연구자 \\| D"],
-        "doi": None,
-        "venue": None,
-        "cited_by_count": 1,
-        "is_open_access": True,
-        "landing_page_url": None,
-        "abstract": None,
-        "saved_at": "",
-    }
-    return report_export.render(
-        {
-            "report": {
-                "report_id": 0,
-                "title": "구분자 검증",
-                "research_question": "표가 깨지는가?",
-                "summary": "본문.",
-                "created_at": "2026-01-01T00:00:00+00:00",
-            },
-            "findings": [
-                {
-                    "position": 1,
-                    "claim": "주장",
-                    "evidence": None,
-                    "paper_openalex_id": "W0000000003",
-                }
-            ],
-            "papers": [paper],
-        }
-    )
 
 
 def verify_meaning_search() -> None:
@@ -320,48 +261,7 @@ def main() -> int:
                 f"[출처 {finding['paper_openalex_id']}]"
             )
 
-    step("12. 리포트를 마크다운으로 내보내기 (export_report)")
-    exported = server.export_report(report_id)
-    if check("내보내기 성공", exported.get("exported") is True, str(exported.get("error", ""))):
-        exported_file = Path(exported["path"])
-        first_text = exported_file.read_text(encoding="utf-8")
-        check("파일이 만들어짐", exported_file.is_file(), exported["path"])
-        check("본문에 리포트 제목이 있음", "검증용 연구 리포트" in first_text)
-        check(
-            "근거가 모두 들어감",
-            all(finding["claim"] in first_text for finding in findings),
-            f"{len(findings)}건",
-        )
-
-        # 다시 내보내도 같은 파일에 덮어쓰고 내용이 누적되지 않아야 한다.
-        again = server.export_report(report_id)
-        second_text = exported_file.read_text(encoding="utf-8")
-        check("다시 내보내도 같은 경로", again.get("path") == exported["path"])
-        check(
-            "내용이 누적되지 않음",
-            second_text == first_text and second_text.count("# 검증용 연구 리포트") == 1,
-            f"{len(first_text)}자 → {len(second_text)}자",
-        )
-        check(
-            "참고 논문 표의 열 수가 모두 같음",
-            _table_columns_are_uniform(first_text),
-            "제목이나 저자에 |·줄바꿈이 있어도 표가 깨지지 않아야 한다",
-        )
-        check(
-            "제목의 |와 줄바꿈이 표를 깨지 않음",
-            _table_columns_are_uniform(_render_with_hostile_title()),
-            "실제 논문 제목에는 드물어 렌더링 규칙을 직접 확인한다",
-        )
-
-    step("13. 없는 리포트 내보내기 시도 (거부되어야 함)")
-    missing_export = server.export_report(999999)
-    check(
-        "없는 리포트 내보내기 거부",
-        missing_export.get("exported") is False and "error" in missing_export,
-        str(missing_export.get("error", "")),
-    )
-
-    step("14. 인용 중인 논문 삭제 시도 (거부되어야 함)")
+    step("12. 인용 중인 논문 삭제 시도 (거부되어야 함)")
     blocked = server.delete_saved_paper(paper_ids[0])
     check(
         "인용 중인 논문 삭제 거부",
@@ -369,7 +269,7 @@ def main() -> int:
         preview(blocked, "referenced_by"),
     )
 
-    step("15. 리포트 삭제 (delete_report)")
+    step("13. 리포트 삭제 (delete_report)")
     deleted = server.delete_report(report_id)
     check(
         "리포트 삭제 성공",
@@ -378,7 +278,7 @@ def main() -> int:
     )
     check("삭제한 리포트는 불러올 수 없음", "error" in server.load_report(report_id))
 
-    step("16. 리포트 삭제 후에도 참고 논문은 보존")
+    step("14. 리포트 삭제 후에도 참고 논문은 보존")
     remaining = server.list_saved_papers()
     check(
         "논문이 남아 있음",
@@ -386,7 +286,7 @@ def main() -> int:
         preview(remaining, "count"),
     )
 
-    step("17. 참조가 사라진 논문 삭제 (delete_saved_paper)")
+    step("15. 참조가 사라진 논문 삭제 (delete_saved_paper)")
     now_deletable = server.delete_saved_paper(paper_ids[0])
     check(
         "논문 삭제 성공",

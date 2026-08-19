@@ -37,8 +37,8 @@
 4. LLM이 선별한 논문을 `save_papers`로 저장한다.
 5. `compare_papers`로 저장된 논문의 지표 표와 집계를 받는다.
 6. LLM이 지표를 해석해 주장별 근거와 출처를 갖춘 리포트를 구성하고 `save_report`로 저장한다.
-7. 필요하면 `export_report`로 리포트를 마크다운 파일로 내보낸다.
-8. 이후 `list_reports`, `load_report`, `delete_report`로 리포트를 재활용하거나 정리한다.
+7. 이후 `list_reports`, `load_report`, `delete_report`로 리포트를 재활용하거나 정리한다.
+8. 저장한 리포트를 사람이 읽을 때는 웹 뷰어를 쓴다.
 
 ## Functional requirements
 
@@ -50,7 +50,7 @@
 - **FR5** 참고 논문과 리포트는 각각 저장·목록 조회·불러오기·삭제가 가능해야 한다.
 - **FR6** 모든 데이터는 SQLite 파일에 보존되어 Server를 재시작해도 유지된다.
 - **FR7** 리포트를 삭제해도 참고 논문은 보존되어 다른 리포트에서 계속 사용할 수 있다.
-- **FR8** 저장된 리포트를 사람이 읽을 수 있는 마크다운 파일로 내보낼 수 있어야 한다. 한 리포트는 항상 같은 파일에 쓰며, 다시 내보내면 덮어쓴다. 한 파일에 여러 리포트를 누적하지 않는다.
+- **FR8** 저장된 리포트를 사람이 읽는 통로는 웹 뷰어 하나로 둔다. 파일로 내보내는 Tool은 제공하지 않는다. 읽는 곳이 하나면 본문 형식을 그 화면에 맞춰 정할 수 있고, 텍스트 파일용 이스케이프 규칙을 따로 유지할 필요도 없다.
 
 ## Tool contracts
 
@@ -110,7 +110,6 @@
 | `save_report` | `title: str`, `research_question: str`, `summary: str`, `findings: list[dict]` | `report_id`, `finding_count`, `paper_count` |
 | `list_reports` | `limit: int = 20` | `count`, `reports[]` |
 | `load_report` | `report_id: int` | `report`, `findings[]`, `papers[]` |
-| `export_report` | `report_id: int` | `exported: bool`, `path`, `finding_count`, `paper_count` |
 | `delete_report` | `report_id: int` | `deleted: bool`, `deleted_findings` |
 
 `findings[]` 각 항목: `claim: str` (필수), `evidence: str` (선택), `paper_openalex_id: str` (필수).
@@ -129,13 +128,7 @@ report_findings(id PK, report_id -> reports(id) ON DELETE CASCADE,
                 position, claim, evidence, paper_openalex_id -> papers(openalex_id))
 ```
 
-내보낸 마크다운 파일의 폴더는 환경변수 `REPORT_EXPORT_DIR`로 지정하며, 기본값은 저장소 루트의 `reports`다. 파일 이름은 `report-<report_id>.md`로 고정해 같은 리포트가 항상 같은 파일에 대응하게 한다. 이 파일은 SQLite에 있는 내용을 사람이 읽기 좋게 옮긴 사본이며 원본이 아니다.
-
-`delete_report`는 이 파일을 지우지 않는다. 리포트를 지우면 본문이 DB에서 사라지므로 파일이 마지막 사본이 되고, `reports.id`가 `AUTOINCREMENT`라 같은 이름이 다른 리포트에 재사용되지도 않는다. 파일 정리는 사용자의 몫으로 남긴다.
-
-표에 들어가는 제목과 저자는 `|`를 문자 참조 `&#124;`로 바꾸고, 값에 있던 백슬래시를 이스케이프하고, 줄바꿈을 공백으로 바꾼 뒤 넣는다. 구분자가 값에 섞이면 열이 밀리거나 행이 쪼개지기 때문이다.
-
-`|`를 백슬래시로 이스케이프하지 않는 이유는 값에 이미 백슬래시가 있을 때(수식 표기의 `\|` 등) `\\|`가 되어 백슬래시끼리 이스케이프를 소진하고 `|`가 다시 칸 구분자로 살아나기 때문이다. 문자 참조로 바꾸면 칸 값에 `|`가 남지 않아, 표 행의 `|`는 모두 칸 구분자라고 단정할 수 있다. 값의 백슬래시를 이스케이프하는 것은 그다음 문제로, 그대로 두면 뒤따르는 문자 참조의 `&`를 이스케이프해 `&#124;`가 글자 그대로 보인다.
+SQLite 파일이 리포트의 유일한 원본이다. 사본을 파일로 따로 두지 않으므로 `delete_report`는 그 리포트를 되돌릴 수 없게 지운다.
 
 `report_findings`가 리포트↔논문 N:M 연결과 주장–출처 매핑을 동시에 표현한다. 리포트의 참고 논문 목록은 이 테이블에서 유도하며, 같은 사실을 저장하는 별도 연결 테이블은 두지 않는다.
 
@@ -165,8 +158,6 @@ Tool은 예외를 밖으로 던지지 않는다. 아래 상황을 `error` 메시
 | `findings`가 미저장 논문을 참조 | `error` + `missing_ids[]` (먼저 `save_papers` 호출 유도) |
 | 존재하지 않는 `report_id` | `error` |
 | 참조 중인 논문 삭제 시도 | `error` + `referenced_by[]` |
-| 리포트 파일 쓰기 실패 | 폴더 생성이나 쓰기가 실패하면 `error` + `exported: false` |
-| 존재하지 않는 리포트 내보내기 | `error` + `exported: false` |
 
 ## Completion criteria
 
@@ -178,8 +169,8 @@ Tool은 예외를 밖으로 던지지 않는다. 아래 상황을 `error` 메시
 6. 정상 `save_report` 이후 `list_reports`·`load_report`가 근거와 출처를 포함해 리포트를 재현한다.
 7. `delete_report` 후 리포트와 findings는 사라지고 `papers`는 남는다.
 8. Server 재시작 후에도 저장된 데이터가 유지된다.
-9. `export_report`가 마크다운 파일을 만들고, 같은 리포트를 다시 내보내면 내용이 누적되지 않고 같은 경로에 덮어쓰인다.
-10. `server.py`가 stdio로 오류 없이 기동하고 Tool 목록이 노출된다.
+9. `server.py`가 stdio로 오류 없이 기동하고 Tool 목록이 노출된다.
+10. 웹 뷰어의 목록에서 리포트를 눌러 상세 페이지로 이동하면 본문·근거·출처·참고 논문을 읽을 수 있다.
 
 ## 웹 리포트 뷰어
 
@@ -189,6 +180,8 @@ Tool은 예외를 밖으로 던지지 않는다. 아래 상황을 `error` 메시
 - **WV2** 상세 페이지는 본문, 주장별 근거, 주장이 가리키는 출처 논문, 참고 논문 목록을 보여준다. 저장된 리포트를 사람이 읽는 것이 목적이므로 초록도 함께 노출한다.
 - **WV3** 뷰어는 읽기 전용이다. 저장·삭제·수정은 MCP Tool의 책임으로 남긴다.
 - **WV4** 리포트가 없거나 API에 연결하지 못한 상태를 화면에서 구분해 알린다. 둘 다 빈 목록으로 보이면 원인을 알 수 없다.
+- **WV5** 참고 논문의 지표는 HTML `<table>`로 표시한다. 나란히 놓고 비교하는 값이므로 문자로 그린 표나 나열식 목록보다 표가 맞다. 표가 화면보다 넓어지면 표만 가로로 스크롤하고 페이지 본문은 밀리지 않는다.
+- **WV6** 리포트 본문은 빈 줄을 문단 경계로 보아 문단마다 나누어 표시한다. 한 덩어리로 그리면 문단 경계가 빈 줄로만 보여 글의 구조가 드러나지 않는다. 문단 안의 줄바꿈은 그대로 살린다.
 
 브라우저는 stdio로 말할 수 없으므로 같은 SQLite 파일을 읽는 HTTP 창구를 별도 프로세스로 둔다. `web_api.py`가 `GET /api/reports`와 `GET /api/reports/<id>` 두 경로만 제공하며, 응답 형태는 각각 `list_reports`, `load_report`와 같다. 같은 데이터 형태를 두 번 정의하지 않기 위해 `storage`의 반환값을 그대로 직렬화한다.
 
@@ -204,7 +197,7 @@ Tool은 예외를 밖으로 던지지 않는다. 아래 상황을 `error` 메시
 - 웹 뷰어의 프론트엔드 의존성은 `web/package.json`에만 둔다. React와 라우터, 빌드 도구로 한정하고 UI 프레임워크는 도입하지 않는다.
 - `web_api.py`는 루프백에만 바인딩한다. 접근 제어가 없으므로 단일 사용자 로컬 전제를 벗어나지 않는다.
 - `OPENALEX_API_KEY`는 선택 사항이며, 없어도 검색이 동작해야 한다. 다만 무인증 한도가 낮아 실사용에서는 키 설정을 전제한다.
-- 코드는 역할별로 분리한다. `server.py`는 Tool 정의와 입출력 계약, `openalex.py`는 외부 통신, `storage.py`는 영속화, `report_export.py`는 리포트의 마크다운 렌더링과 파일 쓰기, `web_api.py`는 리포트 조회의 HTTP 직렬화를 담당한다.
+- 코드는 역할별로 분리한다. `server.py`는 Tool 정의와 입출력 계약, `openalex.py`는 외부 통신, `storage.py`는 영속화, `web_api.py`는 리포트 조회의 HTTP 직렬화를 담당한다.
 
 ## Assumptions
 

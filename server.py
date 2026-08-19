@@ -1,8 +1,7 @@
 """OpenAlex 기반 연구 지원 MCP Server.
 
 Tool의 입출력 계약과 검증만 담당한다. OpenAlex 통신은 openalex 모듈이,
-논문·리포트 보존은 storage 모듈이, 리포트의 마크다운 내보내기는 report_export
-모듈이 책임진다.
+논문·리포트 보존은 storage 모듈이 책임진다.
 
 Server는 결정적인 데이터 작업만 수행하고, 비교의 해석과 리포트 산문은 LLM이 작성한다.
 """
@@ -15,7 +14,6 @@ from typing import Any
 from mcp.server import MCPServer
 
 import openalex
-import report_export
 import storage
 
 
@@ -464,7 +462,8 @@ def save_report(
     Args:
         title: 리포트 제목.
         research_question: 이 리포트가 답하려는 연구 질문.
-        summary: 비교 결과를 해석한 리포트 본문. 마크다운을 써도 된다.
+        summary: 비교 결과를 해석한 리포트 본문. 산문으로 쓰고 문단은 빈 줄로
+            나눈다. 읽는 쪽이 문단 단위로 표시하므로 마크다운 표기는 쓰지 않는다.
         findings: 주장과 출처를 짝지은 근거 목록. 각 항목은
             claim(주장, 필수), evidence(주장을 뒷받침하는 구체적 근거, 선택),
             paper_openalex_id(출처 논문의 OpenAlex ID, 필수)를 갖는다.
@@ -545,45 +544,8 @@ def load_report(report_id: int) -> dict[str, Any]:
 
 
 @_tool
-def export_report(report_id: int) -> dict[str, Any]:
-    """저장된 리포트를 마크다운 파일로 내보낸다.
-
-    한 리포트는 항상 같은 파일에 쓴다. 다시 내보내면 이전 내용을 덮어쓰므로
-    한 파일에 여러 리포트가 쌓이지 않는다. 저장 폴더는 환경변수
-    REPORT_EXPORT_DIR로 바꿀 수 있고, 기본값은 저장소의 reports 폴더다.
-
-    Args:
-        report_id: 내보낼 리포트의 ID. list_reports에서 확인할 수 있다.
-    """
-
-    report = storage.get_report(report_id)
-    if report is None:
-        return {"error": f"{report_id}번 리포트를 찾지 못했습니다.", "exported": False}
-
-    try:
-        path = report_export.write(report)
-    except report_export.ExportError as error:
-        return {
-            "error": f"리포트 파일을 쓰지 못했습니다: {error}",
-            "exported": False,
-        }
-
-    return {
-        "exported": True,
-        "report_id": report_id,
-        "path": str(path),
-        "finding_count": len(report["findings"]),
-        "paper_count": len(report["papers"]),
-    }
-
-
-@_tool
 def delete_report(report_id: int) -> dict[str, Any]:
     """저장된 리포트를 삭제한다. 참고 논문은 다른 리포트에서 쓸 수 있도록 남긴다.
-
-    export_report로 내보낸 마크다운 파일은 지우지 않는다. 리포트를 지우면 본문이
-    DB에서 사라지므로 그 파일이 마지막 사본이 된다. 파일까지 정리하려면 직접
-    지워야 한다.
 
     Args:
         report_id: 삭제할 리포트의 ID.

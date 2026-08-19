@@ -29,7 +29,10 @@ DEFAULT_PORT = 8000
 # 넉넉히 덮는 값으로 두고 페이지네이션은 두지 않는다.
 REPORT_LIST_LIMIT = 200
 
-_REPORT_DETAIL_PATH = re.compile(r"^/api/reports/(\d+)$")
+# 자릿수를 묶어 SQLite가 다루는 정수 범위를 넘지 않게 한다. 범위를 넘는 값을
+# 그대로 넘기면 sqlite3가 OverflowError를 던지는데, 이는 sqlite3.Error가 아니라
+# 저장소 오류 처리에 걸리지 않고 핸들러를 죽인다.
+_REPORT_DETAIL_PATH = re.compile(r"^/api/reports/(\d{1,18})$")
 
 
 class ReportRequestHandler(BaseHTTPRequestHandler):

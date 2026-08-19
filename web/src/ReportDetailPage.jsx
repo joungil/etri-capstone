@@ -1,6 +1,6 @@
 import { Link, useParams } from 'react-router-dom'
 
-import { formatDateTime, paperUrl } from './format.js'
+import { formatDateTime, paperUrl, paragraphsOf } from './format.js'
 import { useJson } from './useJson.js'
 
 export default function ReportDetailPage() {
@@ -34,9 +34,12 @@ export default function ReportDetailPage() {
 
       <section className="section">
         <h2 className="section__heading">본문</h2>
-        {/* 본문은 LLM이 쓴 평문이다. 줄바꿈은 CSS로 살리고 따로 나누지 않는다. */}
         <div className="panel panel--prose">
-          <p className="prose">{report.summary}</p>
+          {paragraphsOf(report.summary).map((paragraph, index) => (
+            <p key={index} className="prose">
+              {paragraph}
+            </p>
+          ))}
         </div>
       </section>
 
@@ -75,42 +78,73 @@ export default function ReportDetailPage() {
           참고 논문
           <span className="section__count">{papers.length}</span>
         </h2>
-        <ul className="panel">
-          {papers.map((paper) => (
-            <li key={paper.openalex_id} className="paper">
-              <a
-                className="paper__title"
-                href={paperUrl(paper)}
-                target="_blank"
-                rel="noreferrer"
-              >
-                {paper.title}
-              </a>
-
-              <p className="paper__authors">
-                {paper.authors.length > 0 ? paper.authors.join(', ') : '저자 미상'}
-              </p>
-
-              <p className="paper__meta">
-                <span className="badge">{paper.publication_year}</span>
-                <span className="badge badge--citations">인용 {paper.cited_by_count}</span>
-                {paper.is_open_access && (
-                  <span className="badge badge--open">오픈액세스</span>
-                )}
-                {paper.venue && <span className="paper__venue">{paper.venue}</span>}
-              </p>
-
-              {paper.abstract && (
-                <details className="abstract">
-                  <summary className="abstract__summary">초록</summary>
-                  <p className="abstract__body">{paper.abstract}</p>
-                </details>
-              )}
-            </li>
-          ))}
-        </ul>
+        <PapersTable papers={papers} />
       </section>
     </article>
+  )
+}
+
+/* 지표는 나란히 놓고 비교하는 값이라 표로 읽는 편이 빠르다. 열이 좁아지면
+   표만 가로로 스크롤하고 페이지 자체는 밀리지 않는다. */
+function PapersTable({ papers }) {
+  return (
+    <div className="panel table-wrap">
+      <table className="table">
+        <caption className="table__caption">
+          인용수는 저장 시점의 값이다. 제목을 누르면 원문으로 이동한다.
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col">논문</th>
+            <th scope="col" className="table__number">
+              연도
+            </th>
+            <th scope="col" className="table__number">
+              인용
+            </th>
+            <th scope="col" className="table__center">
+              오픈액세스
+            </th>
+            <th scope="col">저자</th>
+          </tr>
+        </thead>
+        <tbody>
+          {papers.map((paper) => (
+            <tr key={paper.openalex_id}>
+              <th scope="row" className="table__paper">
+                <a
+                  className="paper__title"
+                  href={paperUrl(paper)}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {paper.title}
+                </a>
+                {paper.venue && <p className="paper__venue">{paper.venue}</p>}
+                {paper.abstract && (
+                  <details className="abstract">
+                    <summary className="abstract__summary">초록</summary>
+                    <p className="abstract__body">{paper.abstract}</p>
+                  </details>
+                )}
+              </th>
+              <td className="table__number">{paper.publication_year}</td>
+              <td className="table__number">{paper.cited_by_count}</td>
+              <td className="table__center">
+                {paper.is_open_access ? (
+                  <span className="badge badge--open">예</span>
+                ) : (
+                  <span className="badge">아니오</span>
+                )}
+              </td>
+              <td className="table__authors">
+                {paper.authors.length > 0 ? paper.authors.join(', ') : '저자 미상'}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   )
 }
 

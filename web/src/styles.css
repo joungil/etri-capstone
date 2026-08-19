@@ -478,10 +478,15 @@ code {
 
 .prose {
   margin: 0;
-  /* 본문에 담긴 줄바꿈을 그대로 살린다. */
+  /* 문단 안에 담긴 줄바꿈은 그대로 살린다. 문단 사이는 빈 줄이 아니라
+     아래 여백으로 벌려, 화면에서 문단 덩어리가 눈에 보이게 한다. */
   white-space: pre-wrap;
   line-height: 1.6;
   text-wrap: pretty;
+}
+
+.prose + .prose {
+  margin-top: 1.15rem;
 }
 
 /* ------------------------------------------------------------------ 근거 */
@@ -566,14 +571,87 @@ code {
   letter-spacing: 0;
 }
 
-/* -------------------------------------------------------------- 참고 논문 */
+/* --------------------------------------------------- 참고 논문 표 */
 
-.paper {
-  padding: 1.375rem 1.75rem;
+/* 표가 판보다 넓어지면 표만 가로로 스크롤한다. 판은 overflow를 감추므로
+   여기서 가로축만 되살린다. */
+.table-wrap {
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
-.paper + .paper {
+.table {
+  width: 100%;
+  /* 칸 사이 선을 하나로 합쳐야 머리행과 첫 줄의 선이 겹쳐 보이지 않는다. */
+  border-collapse: collapse;
+  font-size: 0.9375rem;
+}
+
+.table__caption {
+  caption-side: top;
+  padding: 1.25rem 1.75rem 0.9rem;
+  color: var(--text-tertiary);
+  font-size: 0.8125rem;
+  text-align: left;
+  letter-spacing: 0;
+}
+
+.table thead th {
+  padding: 0.7rem 0.9rem;
+  background: var(--surface-sunken);
   border-top: 1px solid var(--hairline);
+  border-bottom: 1px solid var(--hairline);
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-align: left;
+  /* 머리행은 줄바꿈되면 열 높이가 들쭉날쭉해진다. */
+  white-space: nowrap;
+  letter-spacing: 0;
+}
+
+.table tbody th,
+.table tbody td {
+  padding: 1.1rem 0.9rem;
+  border-top: 1px solid var(--hairline);
+  font-weight: 400;
+  text-align: left;
+  vertical-align: top;
+}
+
+/* 양쪽 끝 칸은 다른 구획의 판과 같은 여백에 맞춘다. */
+.table th:first-child,
+.table td:first-child {
+  padding-left: 1.75rem;
+}
+
+.table th:last-child,
+.table td:last-child {
+  padding-right: 1.75rem;
+}
+
+/* 제목 열이 남는 폭을 가져가고, 지표 열은 내용만큼만 차지한다. */
+.table__paper {
+  min-width: 18rem;
+}
+
+.table__number {
+  width: 1%;
+  /* 숫자 폭을 고정해 자리를 맞춘다. Apple이 수치 표시에 쓰는 방식이다. */
+  font-variant-numeric: tabular-nums;
+  text-align: right !important;
+  white-space: nowrap;
+}
+
+.table__center {
+  width: 1%;
+  text-align: center !important;
+  white-space: nowrap;
+}
+
+.table__authors {
+  min-width: 9rem;
+  color: var(--text-secondary);
 }
 
 .paper__title {
@@ -583,45 +661,28 @@ code {
   text-wrap: pretty;
 }
 
-.paper__authors {
-  margin: 0.4rem 0 0;
-  color: var(--text-secondary);
-  font-size: 0.9375rem;
-}
-
-.paper__meta {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-  margin: 0.75rem 0 0;
-}
-
-/* 배지는 뜻이 다르면 색도 다르게 한다. 연도는 하늘, 인용은 버터, OA는 민트. */
-.badge {
-  padding: 0.15rem 0.6rem;
-  background: var(--sky-bg);
-  border-radius: var(--radius-pill);
-  color: var(--sky-fg);
+.paper__venue {
+  margin: 0.35rem 0 0;
+  color: var(--text-tertiary);
   font-size: 0.8125rem;
-  font-weight: 500;
   letter-spacing: 0;
 }
 
-.badge--citations {
-  background: var(--butter-bg);
-  color: var(--butter-fg);
+.badge {
+  display: inline-block;
+  padding: 0.15rem 0.6rem;
+  background: var(--surface-sunken);
+  border-radius: var(--radius-pill);
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  white-space: nowrap;
+  letter-spacing: 0;
 }
 
 .badge--open {
   background: var(--mint-bg);
   color: var(--mint-fg);
-}
-
-.paper__venue {
-  color: var(--text-tertiary);
-  font-size: 0.8125rem;
-  letter-spacing: 0;
 }
 
 /* ------------------------------------------------------------------ 초록 */
@@ -681,9 +742,23 @@ code {
   }
 
   .panel--prose,
-  .finding,
-  .paper {
+  .finding {
     padding-left: 1.25rem;
+    padding-right: 1.25rem;
+  }
+
+  .table__caption {
+    padding-left: 1.25rem;
+    padding-right: 1.25rem;
+  }
+
+  .table th:first-child,
+  .table td:first-child {
+    padding-left: 1.25rem;
+  }
+
+  .table th:last-child,
+  .table td:last-child {
     padding-right: 1.25rem;
   }
 }
