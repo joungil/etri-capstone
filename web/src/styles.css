@@ -1,225 +1,704 @@
+/* Apple의 디자인 언어에 파스텔 색조를 얹은 리포트 뷰어 스타일.
+ *
+ * 결정과 근거는 DESIGN.md에 정리했다. 여기서는 그 결정을 구현만 한다.
+ * 색·간격·라운드·이징을 토큰으로 모아 한 곳에서 바꿀 수 있게 했다.
+ *
+ * 파스텔은 배경에만 쓴다. 글자까지 연하게 하면 읽히지 않으므로, 파스텔 배경
+ * 위의 글자는 같은 색조의 진한 톤을 짝지어 명암비를 지킨다.
+ */
+
+/* ------------------------------------------------------------------ 토큰 */
+
 :root {
-  --bg: #ffffff;
-  --surface: #f6f7f9;
-  --border: #e1e4e8;
-  --text: #1b1f24;
-  --muted: #5b6570;
-  --accent: #1f6feb;
-  --error: #b42318;
+  /* 배경은 파스텔 워시를 얹을 바탕이라 거의 흰색에 가깝게 둔다. */
+  --bg: #fafafc;
+  --surface: #ffffff;
+  --surface-sunken: #f6f5fb;
+
+  /* Apple은 순수 검정을 피한다. 파스텔 위에서도 이 톤이 가장 차분하다. */
+  --text: #1d1d1f;
+  --text-secondary: #63636b;
+  --text-tertiary: #8a8a93;
+
+  /* 강조색은 파스텔 계열의 페리윙클로 두되, 링크로 읽히도록 충분히 눌렀다. */
+  --accent: #4f5bd5;
+  --accent-strong: #3f4ac2;
+  --accent-soft: rgba(79, 91, 213, 0.1);
+  --danger: #b3261e;
+
+  /* 파스텔 팔레트. 배경과 글자를 짝으로 정의해 따로 쓰지 않게 한다. */
+  --lavender-bg: #efeafe;
+  --lavender-fg: #6247bd;
+  --mint-bg: #e0f5ec;
+  --mint-fg: #0e7a57;
+  --peach-bg: #ffede6;
+  --peach-fg: #b04a22;
+  --sky-bg: #e5f1fe;
+  --sky-fg: #1264c0;
+  --butter-bg: #fdf3dc;
+  --butter-fg: #8a5a12;
+
+  /* 경계는 선보다 색의 차이로 나눈다. 선을 쓸 때는 아주 얇게. */
+  --hairline: rgba(0, 0, 0, 0.08);
+  --shadow-card: 0 2px 12px rgba(31, 27, 64, 0.05), 0 1px 2px rgba(31, 27, 64, 0.04);
+  --shadow-card-lifted: 0 14px 34px rgba(79, 91, 213, 0.16);
+
+  /* 내비는 뒤 내용이 비쳐 보이는 재질로 만든다. 워시와 같은 색조로 둔다. */
+  --topbar-bg: rgba(252, 251, 254, 0.72);
+
+  --radius-panel: 18px;
+  --radius-inset: 12px;
+  --radius-pill: 980px;
+
+  /* Apple이 기본으로 쓰는 이징. 시작이 부드럽고 끝이 차분하다. */
+  --ease: cubic-bezier(0.25, 0.1, 0.25, 1);
+  --duration: 260ms;
+
+  --content-width: 47rem;
+  --topbar-height: 3rem;
+
+  /* SF Pro는 Apple 시스템 폰트라 다른 OS에는 없다. Windows 11의 Segoe UI
+   * Variable이 가장 가까운 대응체이고, 한글은 글리프 단위 폴백으로 뒤쪽
+   * 한글 서체가 받는다. 웹폰트를 쓰지 않아 오프라인에서도 같게 보인다. */
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text",
+    "Segoe UI Variable Display", "Segoe UI", system-ui, "Apple SD Gothic Neo",
+    "Pretendard", "Malgun Gothic", sans-serif;
 
   color-scheme: light dark;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #14171a;
-    --surface: #1d2126;
-    --border: #2f353c;
-    --text: #e6e9ec;
-    --muted: #9aa4af;
-    --accent: #6c9bff;
-    --error: #ff8b7e;
+    /* 파스텔 워시를 받으려면 순수 검정보다 살짝 푸른 검정이 낫다. */
+    --bg: #0a0a0f;
+    --surface: #17171d;
+    --surface-sunken: #1e1e26;
+
+    --text: #f5f5f7;
+    --text-secondary: #a3a3ad;
+    --text-tertiary: #86868f;
+
+    --accent: #9aa5ff;
+    --accent-strong: #b3bbff;
+    --accent-soft: rgba(154, 165, 255, 0.16);
+    --danger: #ff8b7e;
+
+    /* 어두운 배경에서는 파스텔을 낮은 투명도의 물감처럼 깔고 글자를 밝게 한다. */
+    --lavender-bg: rgba(154, 130, 255, 0.18);
+    --lavender-fg: #c6b6ff;
+    --mint-bg: rgba(70, 214, 168, 0.16);
+    --mint-fg: #7fe3c0;
+    --peach-bg: rgba(255, 148, 112, 0.16);
+    --peach-fg: #ffb69b;
+    --sky-bg: rgba(96, 173, 255, 0.16);
+    --sky-fg: #9ecbff;
+    --butter-bg: rgba(245, 197, 108, 0.16);
+    --butter-fg: #f0cf8f;
+
+    --hairline: rgba(255, 255, 255, 0.1);
+    --shadow-card: none;
+    --shadow-card-lifted: 0 14px 34px rgba(0, 0, 0, 0.55);
+
+    --topbar-bg: rgba(16, 16, 22, 0.72);
   }
 }
 
-* {
+/* -------------------------------------------------------------- 기본 골격 */
+
+*,
+*::before,
+*::after {
   box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 body {
   margin: 0;
-  background: var(--bg);
   color: var(--text);
-  font-family: "Segoe UI", "Malgun Gothic", system-ui, sans-serif;
-  line-height: 1.65;
+  font-family: var(--font-sans);
+  /* Apple의 본문 크기는 17px다. 14~16px보다 눈에 편하다. */
+  font-size: 1.0625rem;
+  line-height: 1.53;
+  letter-spacing: -0.01em;
+  /* Apple 화면의 글자가 가늘고 매끄럽게 보이는 이유. */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+
+  /* 파스텔 워시. 색 덩어리 셋을 아주 옅게 겹쳐 한 색으로 읽히지 않게 한다.
+   * fixed로 고정해 스크롤할 때 배경이 따라 움직이지 않는다. */
+  background-color: var(--bg);
+  background-image:
+    radial-gradient(60rem 32rem at 8% -8%, var(--lavender-bg) 0%, transparent 62%),
+    radial-gradient(52rem 28rem at 98% -2%, var(--sky-bg) 0%, transparent 58%),
+    radial-gradient(46rem 30rem at 62% 104%, var(--peach-bg) 0%, transparent 60%);
+  background-attachment: fixed;
+  background-repeat: no-repeat;
+  min-height: 100vh;
+}
+
+::selection {
+  background: var(--accent-soft);
 }
 
 a {
   color: var(--accent);
+  text-decoration: none;
+  transition: color var(--duration) var(--ease);
 }
 
-.page {
-  max-width: 52rem;
+a:hover {
+  color: var(--accent-strong);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+/* 키보드 사용자에게만 초점 링을 보여준다. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+code {
+  padding: 0.15em 0.4em;
+  background: var(--lavender-bg);
+  border-radius: 6px;
+  color: var(--lavender-fg);
+  font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Consolas", monospace;
+  font-size: 0.875em;
+}
+
+/* ----------------------------------------------------------------- 내비 */
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  height: var(--topbar-height);
+  background: var(--topbar-bg);
+  border-bottom: 1px solid var(--hairline);
+  /* 재질감의 핵심. 채도를 올려야 뒤 색이 탁해지지 않는다. */
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
+}
+
+.topbar__inner {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  max-width: var(--content-width);
   margin: 0 auto;
-  padding: 2rem 1.25rem 4rem;
+  padding: 0 1.5rem;
 }
 
-.page__header {
-  padding-bottom: 1rem;
-  margin-bottom: 1.5rem;
-  border-bottom: 1px solid var(--border);
-}
-
-.page__home {
-  font-size: 1.05rem;
+.topbar__brand {
+  color: var(--text);
+  font-size: 0.9375rem;
   font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.topbar__brand:hover {
   color: var(--text);
   text-decoration: none;
+  opacity: 0.7;
 }
 
+.main {
+  max-width: var(--content-width);
+  margin: 0 auto;
+  padding: 3rem 1.5rem 6rem;
+}
+
+/* ------------------------------------------------------------- 페이지 머리 */
+
+.hero {
+  margin-bottom: 2.5rem;
+}
+
+.hero__title {
+  margin: 0;
+  /* 큰 글자는 자간을 좁혀야 덩어리로 읽힌다. Apple 표제의 특징이다. */
+  font-size: clamp(2rem, 5vw, 2.75rem);
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: -0.025em;
+  text-wrap: balance;
+}
+
+.hero__subtitle {
+  margin: 0.75rem 0 0;
+  color: var(--text-secondary);
+  font-size: 1.1875rem;
+  line-height: 1.45;
+  letter-spacing: -0.012em;
+  text-wrap: pretty;
+}
+
+.hero__stamp {
+  margin: 1rem 0 0;
+  color: var(--text-tertiary);
+  font-size: 0.875rem;
+  letter-spacing: 0;
+}
+
+/* ----------------------------------------------------------- 안내와 상태 */
+
 .notice {
-  padding: 1.25rem;
+  margin: 0;
+  padding: 2.5rem 1.75rem;
   background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 0.5rem;
-  color: var(--muted);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-card);
+  color: var(--text-secondary);
+  text-align: center;
 }
 
 .notice--error {
-  color: var(--error);
+  color: var(--danger);
 }
 
-.notice code {
-  padding: 0.1rem 0.3rem;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 0.25rem;
+.notice--loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  color: var(--text-tertiary);
 }
 
-/* 목록 */
+/* Apple의 활동 표시기처럼 얇은 고리로 만든다. */
+.notice--loading::before {
+  content: "";
+  width: 1.125rem;
+  height: 1.125rem;
+  border: 2px solid var(--lavender-bg);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 700ms linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* --------------------------------------------------------------- 리포트 목록 */
 
 .report-list {
   display: grid;
-  gap: 0.75rem;
+  gap: 0.875rem;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.report-card {
+.card {
+  position: relative;
   display: block;
-  padding: 1rem 1.25rem;
+  /* 오른쪽은 갈매기표 자리를 비워 둔다. */
+  padding: 1.5rem 3.25rem 1.5rem 1.75rem;
   background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 0.5rem;
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-card);
+  color: inherit;
+  overflow: hidden;
+  transition:
+    transform var(--duration) var(--ease),
+    box-shadow var(--duration) var(--ease);
+}
+
+/* 카드마다 왼쪽에 파스텔 띠를 둬 목록이 단조롭지 않게 한다. */
+.card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 4px;
+  background: var(--lavender-fg);
+  opacity: 0.55;
+  transition: opacity var(--duration) var(--ease);
+}
+
+.report-list li:nth-child(5n + 2) .card::before {
+  background: var(--mint-fg);
+}
+
+.report-list li:nth-child(5n + 3) .card::before {
+  background: var(--peach-fg);
+}
+
+.report-list li:nth-child(5n + 4) .card::before {
+  background: var(--sky-fg);
+}
+
+.report-list li:nth-child(5n + 5) .card::before {
+  background: var(--butter-fg);
+}
+
+.card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-card-lifted);
   color: inherit;
   text-decoration: none;
 }
 
-.report-card:hover {
-  border-color: var(--accent);
+.card:hover::before {
+  opacity: 1;
 }
 
-.report-card__title {
-  margin: 0 0 0.35rem;
-  font-size: 1.1rem;
+.card:active {
+  transform: translateY(0);
 }
 
-.report-card__question {
-  margin: 0 0 0.5rem;
-  color: var(--muted);
-}
-
-.report-card__meta {
+.card__title {
   margin: 0;
-  font-size: 0.85rem;
-  color: var(--muted);
+  font-size: 1.3125rem;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.018em;
+  text-wrap: balance;
 }
 
-/* 상세 */
+.card__question {
+  margin: 0.5rem 0 0;
+  color: var(--text-secondary);
+  line-height: 1.45;
+  text-wrap: pretty;
+}
 
-.back-link {
-  display: inline-block;
-  margin-bottom: 1.25rem;
-  font-size: 0.9rem;
+.card__meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 1rem 0 0;
+  color: var(--text-tertiary);
+  font-size: 0.875rem;
+  letter-spacing: 0;
+}
+
+.dot {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.5;
+}
+
+.card__chevron {
+  position: absolute;
+  top: 50%;
+  right: 1.5rem;
+  color: var(--text-tertiary);
+  font-size: 1.5rem;
+  line-height: 1;
+  transform: translateY(-50%);
+  transition:
+    transform var(--duration) var(--ease),
+    color var(--duration) var(--ease);
+}
+
+.card:hover .card__chevron {
+  transform: translate(3px, -50%);
+  color: var(--accent);
+}
+
+/* --------------------------------------------------------------- 돌아가기 */
+
+.back {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-bottom: 2rem;
+  padding: 0.4rem 0.95rem 0.4rem 0.8rem;
+  background: var(--surface);
+  /* 알약 모양 버튼은 Apple UI의 기본 형태다. */
+  border-radius: var(--radius-pill);
+  box-shadow: var(--shadow-card);
+  font-size: 0.9375rem;
+  font-weight: 500;
+  transition:
+    transform var(--duration) var(--ease),
+    box-shadow var(--duration) var(--ease);
+}
+
+.back:hover {
+  transform: translateX(-2px);
+  box-shadow: var(--shadow-card-lifted);
   text-decoration: none;
 }
 
-.report__title {
+/* ------------------------------------------------------------------ 구획 */
+
+.section {
+  margin-top: 3rem;
+}
+
+.section__heading {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
   margin: 0 0 1rem;
-  font-size: 1.6rem;
-  line-height: 1.35;
+  padding-left: 0.25rem;
+  font-size: 1.375rem;
+  font-weight: 600;
+  letter-spacing: -0.018em;
 }
 
-.report__meta {
-  display: grid;
-  grid-template-columns: max-content 1fr;
-  gap: 0.35rem 1rem;
-  margin: 0 0 2rem;
-  padding: 1rem 1.25rem;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 0.5rem;
-  font-size: 0.9rem;
+.section__count {
+  padding: 0.1rem 0.55rem;
+  background: var(--lavender-bg);
+  border-radius: var(--radius-pill);
+  color: var(--lavender-fg);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0;
 }
 
-.report__meta dt {
-  color: var(--muted);
-}
-
-.report__meta dd {
-  margin: 0;
-}
-
-.report h2 {
-  margin: 2.25rem 0 0.85rem;
-  padding-bottom: 0.35rem;
-  border-bottom: 1px solid var(--border);
-  font-size: 1.15rem;
-}
-
-.report__summary {
-  /* 본문에 담긴 줄바꿈을 그대로 살린다. */
-  white-space: pre-wrap;
-  margin: 0;
-}
-
-.findings {
-  margin: 0;
-  padding-left: 1.5rem;
-}
-
-.finding {
-  margin-bottom: 1.25rem;
-}
-
-.finding__claim {
-  margin: 0 0 0.35rem;
-}
-
-.finding__evidence,
-.finding__source {
-  margin: 0.2rem 0;
-  font-size: 0.9rem;
-  color: var(--muted);
-}
-
-.papers {
+/* iOS 설정 화면처럼, 묶음은 둥근 판 하나에 담고 안에서 얇은 선으로 나눈다. */
+.panel {
   margin: 0;
   padding: 0;
   list-style: none;
+  background: var(--surface);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
 }
+
+.panel--prose {
+  padding: 1.75rem;
+}
+
+.prose {
+  margin: 0;
+  /* 본문에 담긴 줄바꿈을 그대로 살린다. */
+  white-space: pre-wrap;
+  line-height: 1.6;
+  text-wrap: pretty;
+}
+
+/* ------------------------------------------------------------------ 근거 */
+
+.findings {
+  counter-reset: finding;
+}
+
+.finding {
+  display: grid;
+  grid-template-columns: 1.625rem 1fr;
+  column-gap: 0.875rem;
+  padding: 1.375rem 1.75rem;
+}
+
+.finding + .finding {
+  border-top: 1px solid var(--hairline);
+}
+
+/* 번호 원판의 색을 다섯 가지 파스텔로 돌린다. */
+.finding::before {
+  counter-increment: finding;
+  content: counter(finding);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.625rem;
+  height: 1.625rem;
+  margin-top: 0.05rem;
+  background: var(--lavender-bg);
+  border-radius: 50%;
+  color: var(--lavender-fg);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.finding:nth-child(5n + 2)::before {
+  background: var(--mint-bg);
+  color: var(--mint-fg);
+}
+
+.finding:nth-child(5n + 3)::before {
+  background: var(--peach-bg);
+  color: var(--peach-fg);
+}
+
+.finding:nth-child(5n + 4)::before {
+  background: var(--sky-bg);
+  color: var(--sky-fg);
+}
+
+.finding:nth-child(5n + 5)::before {
+  background: var(--butter-bg);
+  color: var(--butter-fg);
+}
+
+.finding__claim,
+.finding__evidence,
+.finding__source {
+  grid-column: 2;
+}
+
+.finding__claim {
+  margin: 0;
+  font-weight: 500;
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+
+.finding__evidence {
+  margin: 0.45rem 0 0;
+  color: var(--text-secondary);
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+
+.finding__source {
+  margin-top: 0.65rem;
+  font-size: 0.875rem;
+  letter-spacing: 0;
+}
+
+/* -------------------------------------------------------------- 참고 논문 */
 
 .paper {
-  padding: 0.9rem 0;
-  border-bottom: 1px solid var(--border);
+  padding: 1.375rem 1.75rem;
 }
 
-.paper:last-child {
-  border-bottom: none;
+.paper + .paper {
+  border-top: 1px solid var(--hairline);
 }
 
 .paper__title {
   font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: -0.012em;
+  text-wrap: pretty;
 }
 
-.paper__meta,
 .paper__authors {
-  margin: 0.3rem 0 0;
-  font-size: 0.85rem;
-  color: var(--muted);
+  margin: 0.4rem 0 0;
+  color: var(--text-secondary);
+  font-size: 0.9375rem;
 }
 
-.paper__abstract {
-  margin-top: 0.5rem;
-  font-size: 0.9rem;
+.paper__meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.75rem 0 0;
 }
 
-.paper__abstract summary {
-  color: var(--muted);
+/* 배지는 뜻이 다르면 색도 다르게 한다. 연도는 하늘, 인용은 버터, OA는 민트. */
+.badge {
+  padding: 0.15rem 0.6rem;
+  background: var(--sky-bg);
+  border-radius: var(--radius-pill);
+  color: var(--sky-fg);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.badge--citations {
+  background: var(--butter-bg);
+  color: var(--butter-fg);
+}
+
+.badge--open {
+  background: var(--mint-bg);
+  color: var(--mint-fg);
+}
+
+.paper__venue {
+  color: var(--text-tertiary);
+  font-size: 0.8125rem;
+  letter-spacing: 0;
+}
+
+/* ------------------------------------------------------------------ 초록 */
+
+.abstract {
+  margin-top: 0.9rem;
+}
+
+.abstract__summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  /* 기본 삼각형 표식을 지우고 갈매기표로 바꾼다. */
+  list-style: none;
+  color: var(--accent);
+  font-size: 0.875rem;
+  font-weight: 500;
   cursor: pointer;
+  letter-spacing: 0;
 }
 
-.paper__abstract p {
-  margin: 0.5rem 0 0;
+.abstract__summary::-webkit-details-marker {
+  display: none;
+}
+
+.abstract__summary::before {
+  content: "›";
+  display: inline-block;
+  font-size: 1.1em;
+  transition: transform var(--duration) var(--ease);
+}
+
+.abstract[open] .abstract__summary::before {
+  transform: rotate(90deg);
+}
+
+.abstract__body {
+  margin: 0.7rem 0 0;
+  padding: 1rem 1.125rem;
+  background: var(--surface-sunken);
+  border-radius: var(--radius-inset);
+  color: var(--text-secondary);
+  font-size: 0.9375rem;
+  line-height: 1.55;
+  text-wrap: pretty;
+}
+
+/* ------------------------------------------------------------------ 반응 */
+
+@media (max-width: 32rem) {
+  .main {
+    padding: 2rem 1.125rem 4rem;
+  }
+
+  .card {
+    padding: 1.25rem 2.75rem 1.25rem 1.25rem;
+  }
+
+  .panel--prose,
+  .finding,
+  .paper {
+    padding-left: 1.25rem;
+    padding-right: 1.25rem;
+  }
+}
+
+/* 움직임을 줄여 달라는 설정을 존중한다. */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
