@@ -17,9 +17,13 @@ export function paperUrl(paper) {
  *
  * 본문은 LLM이 쓴 산문이라 빈 줄이 문단 경계다. 통째로 한 덩어리로 그리면
  * 그 경계가 그냥 빈 줄로만 보이므로, 문단마다 별도 요소로 만들어 간격을 준다.
+ *
+ * 나누기 전에 개행을 \n으로 맞춘다. 본문은 어떤 줄바꿈 표기로도 저장될 수
+ * 있고, CRLF를 그대로 두면 빈 줄이 경계로 잡히지 않아 문단이 붙어 버린다.
  */
 export function paragraphsOf(text) {
   return text
+    .replace(/\r\n?/g, '\n')
     .split(/\n[ \t]*\n/)
     .map((paragraph) => paragraph.trim())
     .filter((paragraph) => paragraph.length > 0)

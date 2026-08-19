@@ -22,8 +22,12 @@ from urllib.parse import urlsplit
 import storage
 
 
-DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8000
+
+# 이 API에는 인증이 없다. 루프백에만 바인딩해 접근을 같은 기기로 묶는 것이
+# 유일한 접근 제어이므로 주소는 설정으로 열어 두지 않는다. 다른 기기에서 읽게
+# 하려면 주소를 바꾸기 전에 인증과 접근 제어를 먼저 갖춰야 한다.
+BIND_HOST = "127.0.0.1"
 
 # storage.list_reports가 LIMIT을 요구한다. 단일 사용자의 로컬 리포트 수를
 # 넉넉히 덮는 값으로 두고 페이지네이션은 두지 않는다.
@@ -73,14 +77,12 @@ class ReportRequestHandler(BaseHTTPRequestHandler):
 
 
 def serve() -> None:
-    """API 서버를 띄운다. 주소와 포트는 환경변수로 바꿀 수 있다."""
+    """API 서버를 띄운다. 포트만 환경변수로 바꿀 수 있다."""
 
-    host = os.getenv("WEB_API_HOST", DEFAULT_HOST)
     port = int(os.getenv("WEB_API_PORT", str(DEFAULT_PORT)))
 
-    # 접근 제어가 없으므로 루프백에만 붙인다. SPEC의 단일 사용자 로컬 전제와 같다.
-    server = ThreadingHTTPServer((host, port), ReportRequestHandler)
-    print(f"리포트 API: http://{host}:{port}/api/reports")
+    server = ThreadingHTTPServer((BIND_HOST, port), ReportRequestHandler)
+    print(f"리포트 API: http://{BIND_HOST}:{port}/api/reports")
     print(f"SQLite: {storage.database_path()}")
     try:
         server.serve_forever()
