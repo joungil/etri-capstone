@@ -35,6 +35,8 @@ server.py        Tool 정의와 입출력 검증
 openalex.py      OpenAlex API 통신과 응답 정규화
 storage.py       SQLite 스키마와 논문·리포트 보존
 report_export.py 리포트의 마크다운 렌더링과 파일 쓰기
+web_api.py       저장된 리포트를 브라우저가 읽을 수 있게 HTTP로 노출 (읽기 전용)
+web/             저장된 리포트를 목록·상세로 보는 React 뷰어
 verify_flow.py   전체 흐름을 한 번 실행해 보는 수동 검증 스크립트
 ```
 
@@ -152,6 +154,38 @@ Windows에서는 경로 구분자를 `\\`로 쓰고 인터프리터는 `.venv\\S
 
 `export_report`는 리포트를 `reports/report-<id>.md`에 쓴다. 파일 이름이 리포트 ID로 고정되므로 같은 리포트를 다시 내보내면 이전 파일을 덮어쓰고, 한 파일에 여러 리포트가 누적되지 않는다. 이 폴더는 SQLite에 있는 내용의 읽기용 사본이라 `.gitignore`에 등록해 두었다.
 
+## 웹 리포트 뷰어
+
+저장된 리포트를 브라우저에서 목록으로 보고, 항목을 눌러 상세 페이지에서 읽는다. 읽기 전용이며 저장·삭제는 MCP Tool의 몫으로 남긴다.
+
+브라우저는 stdio로 말할 수 없어 프로세스를 둘로 나눴다. `web_api.py`가 SQLite를 읽어 JSON으로 내주고, React 개발 서버가 화면을 그린다. React 쪽은 `/api` 요청을 `web_api.py`로 넘기도록 프록시가 걸려 있어 브라우저에서는 같은 출처로 보인다.
+
+| 경로 | 응답 |
+|---|---|
+| `GET /api/reports` | `count`, `reports[]` (`list_reports`와 같은 형태) |
+| `GET /api/reports/<id>` | `report`, `findings[]`, `papers[]` (`load_report`와 같은 형태) |
+
+처음 한 번은 프론트엔드 의존성을 설치한다.
+
+```bash
+cd web
+npm install
+```
+
+이후에는 터미널 두 개로 함께 띄운다.
+
+```bash
+# 터미널 1 - 리포트 API (127.0.0.1:8000)
+.venv/Scripts/python.exe web_api.py
+
+# 터미널 2 - React 개발 서버 (localhost:3000)
+cd web && npm run dev
+```
+
+`http://localhost:3000`을 열면 리포트 목록이 나온다. 항목을 누르면 `/reports/<id>` 주소의 상세 페이지로 이동해 본문·근거·출처·참고 논문을 읽을 수 있다. 주소가 리포트마다 다르므로 브라우저의 뒤로 가기와 주소 직접 입력이 모두 동작한다.
+
+저장된 리포트가 없으면 목록 대신 안내 문구가 나온다. `save_report`로 리포트를 하나 저장한 뒤 새로고침하면 보인다.
+
 ## 환경 변수
 
 | 변수 | 설명 |
@@ -159,6 +193,8 @@ Windows에서는 경로 구분자를 `\\`로 쓰고 인터프리터는 `.venv\\S
 | `OPENALEX_API_KEY` | 선택 사항. 없어도 검색은 동작하지만 무인증 한도(하루 1,000 크레딧)에 걸려 `HTTP 429`가 나기 쉽다. 키를 넣으면 10,000 크레딧으로 올라간다 |
 | `RESEARCH_DB_PATH` | 선택 사항. SQLite 파일 경로. 기본값은 저장소의 `research.db` |
 | `REPORT_EXPORT_DIR` | 선택 사항. `export_report`가 마크다운을 저장할 폴더. 기본값은 저장소의 `reports` |
+| `WEB_API_HOST` | 선택 사항. `web_api.py`가 바인딩할 주소. 기본값은 `127.0.0.1` |
+| `WEB_API_PORT` | 선택 사항. `web_api.py`의 포트. 기본값은 `8000`. 바꾸면 `web/vite.config.js`의 프록시 대상도 함께 고쳐야 한다 |
 
 ## 동작 검증
 

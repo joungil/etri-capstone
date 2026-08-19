@@ -181,13 +181,28 @@ Tool은 예외를 밖으로 던지지 않는다. 아래 상황을 `error` 메시
 9. `export_report`가 마크다운 파일을 만들고, 같은 리포트를 다시 내보내면 내용이 누적되지 않고 같은 경로에 덮어쓰인다.
 10. `server.py`가 stdio로 오류 없이 기동하고 Tool 목록이 노출된다.
 
+## 웹 리포트 뷰어
+
+저장된 리포트를 브라우저에서 목록으로 보고 상세 페이지에서 읽기 위한 부속 구성이다. MCP Tool 표면에는 포함되지 않는다.
+
+- **WV1** 리포트 목록과 리포트 상세를 각각 별도 주소로 볼 수 있어야 한다. 목록에서 항목을 누르면 그 리포트의 상세 주소로 이동한다.
+- **WV2** 상세 페이지는 본문, 주장별 근거, 주장이 가리키는 출처 논문, 참고 논문 목록을 보여준다. 저장된 리포트를 사람이 읽는 것이 목적이므로 초록도 함께 노출한다.
+- **WV3** 뷰어는 읽기 전용이다. 저장·삭제·수정은 MCP Tool의 책임으로 남긴다.
+- **WV4** 리포트가 없거나 API에 연결하지 못한 상태를 화면에서 구분해 알린다. 둘 다 빈 목록으로 보이면 원인을 알 수 없다.
+
+브라우저는 stdio로 말할 수 없으므로 같은 SQLite 파일을 읽는 HTTP 창구를 별도 프로세스로 둔다. `web_api.py`가 `GET /api/reports`와 `GET /api/reports/<id>` 두 경로만 제공하며, 응답 형태는 각각 `list_reports`, `load_report`와 같다. 같은 데이터 형태를 두 번 정의하지 않기 위해 `storage`의 반환값을 그대로 직렬화한다.
+
+화면은 `web/`의 React 앱이 그린다. 개발 서버는 `localhost:3000`에 고정하고, `/api` 요청만 `web_api.py`로 프록시해 브라우저에서 같은 출처로 보이게 한다. 그래서 API에 CORS 헤더를 두지 않는다.
+
 ## Constraints
 
 - Python 3.10 이상.
-- 의존성은 `mcp==2.0.0`만 사용한다. SQLite·HTTP·JSON은 표준 라이브러리(`sqlite3`, `urllib`, `json`)로 처리하며 `requirements.txt`에 추가하지 않는다.
-- 전송 방식은 stdio를 유지한다.
+- Server의 의존성은 `mcp==2.0.0`만 사용한다. SQLite·HTTP·JSON은 표준 라이브러리(`sqlite3`, `urllib`, `json`)로 처리하며 `requirements.txt`에 추가하지 않는다. `web_api.py`도 이 제약을 따라 `http.server`로 구현한다.
+- MCP Server의 전송 방식은 stdio를 유지한다. 웹 뷰어의 HTTP는 MCP 전송이 아니라 브라우저용 조회 창구이며, 별도 프로세스로 분리해 이 제약을 벗어나지 않는다.
+- 웹 뷰어의 프론트엔드 의존성은 `web/package.json`에만 둔다. React와 라우터, 빌드 도구로 한정하고 UI 프레임워크는 도입하지 않는다.
+- `web_api.py`는 루프백에만 바인딩한다. 접근 제어가 없으므로 단일 사용자 로컬 전제를 벗어나지 않는다.
 - `OPENALEX_API_KEY`는 선택 사항이며, 없어도 검색이 동작해야 한다. 다만 무인증 한도가 낮아 실사용에서는 키 설정을 전제한다.
-- 코드는 역할별로 분리한다. `server.py`는 Tool 정의와 입출력 계약, `openalex.py`는 외부 통신, `storage.py`는 영속화, `report_export.py`는 리포트의 마크다운 렌더링과 파일 쓰기를 담당한다.
+- 코드는 역할별로 분리한다. `server.py`는 Tool 정의와 입출력 계약, `openalex.py`는 외부 통신, `storage.py`는 영속화, `report_export.py`는 리포트의 마크다운 렌더링과 파일 쓰기, `web_api.py`는 리포트 조회의 HTTP 직렬화를 담당한다.
 
 ## Assumptions
 

@@ -1,0 +1,225 @@
+:root {
+  --bg: #ffffff;
+  --surface: #f6f7f9;
+  --border: #e1e4e8;
+  --text: #1b1f24;
+  --muted: #5b6570;
+  --accent: #1f6feb;
+  --error: #b42318;
+
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14171a;
+    --surface: #1d2126;
+    --border: #2f353c;
+    --text: #e6e9ec;
+    --muted: #9aa4af;
+    --accent: #6c9bff;
+    --error: #ff8b7e;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Segoe UI", "Malgun Gothic", system-ui, sans-serif;
+  line-height: 1.65;
+}
+
+a {
+  color: var(--accent);
+}
+
+.page {
+  max-width: 52rem;
+  margin: 0 auto;
+  padding: 2rem 1.25rem 4rem;
+}
+
+.page__header {
+  padding-bottom: 1rem;
+  margin-bottom: 1.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.page__home {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.notice {
+  padding: 1.25rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  color: var(--muted);
+}
+
+.notice--error {
+  color: var(--error);
+}
+
+.notice code {
+  padding: 0.1rem 0.3rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 0.25rem;
+}
+
+/* 목록 */
+
+.report-list {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.report-card {
+  display: block;
+  padding: 1rem 1.25rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  color: inherit;
+  text-decoration: none;
+}
+
+.report-card:hover {
+  border-color: var(--accent);
+}
+
+.report-card__title {
+  margin: 0 0 0.35rem;
+  font-size: 1.1rem;
+}
+
+.report-card__question {
+  margin: 0 0 0.5rem;
+  color: var(--muted);
+}
+
+.report-card__meta {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+/* 상세 */
+
+.back-link {
+  display: inline-block;
+  margin-bottom: 1.25rem;
+  font-size: 0.9rem;
+  text-decoration: none;
+}
+
+.report__title {
+  margin: 0 0 1rem;
+  font-size: 1.6rem;
+  line-height: 1.35;
+}
+
+.report__meta {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.35rem 1rem;
+  margin: 0 0 2rem;
+  padding: 1rem 1.25rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.report__meta dt {
+  color: var(--muted);
+}
+
+.report__meta dd {
+  margin: 0;
+}
+
+.report h2 {
+  margin: 2.25rem 0 0.85rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 1.15rem;
+}
+
+.report__summary {
+  /* 본문에 담긴 줄바꿈을 그대로 살린다. */
+  white-space: pre-wrap;
+  margin: 0;
+}
+
+.findings {
+  margin: 0;
+  padding-left: 1.5rem;
+}
+
+.finding {
+  margin-bottom: 1.25rem;
+}
+
+.finding__claim {
+  margin: 0 0 0.35rem;
+}
+
+.finding__evidence,
+.finding__source {
+  margin: 0.2rem 0;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.papers {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.paper {
+  padding: 0.9rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.paper:last-child {
+  border-bottom: none;
+}
+
+.paper__title {
+  font-weight: 600;
+}
+
+.paper__meta,
+.paper__authors {
+  margin: 0.3rem 0 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.paper__abstract {
+  margin-top: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.paper__abstract summary {
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.paper__abstract p {
+  margin: 0.5rem 0 0;
+}
