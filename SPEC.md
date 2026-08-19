@@ -169,6 +169,6 @@ Tool은 예외를 밖으로 던지지 않는다. 아래 상황을 `error` 메시
 ## Open risks
 
 - **인용수 정렬과 주제 적합성의 충돌**: `search` 질의에 `sort=cited_by_count:desc`를 함께 적용하면 인용수만 높고 주제와 무관한 논문이 상위에 오는 것을 확인했다. 기본 정렬을 관련도로 두고, 인용수 정렬은 필터로 후보군을 좁힌 뒤 쓰도록 Tool 설명에 명시한다.
-- **초록 부재**: OpenAlex에 `abstract_inverted_index`가 없는 레코드가 존재한다. 이 경우 `abstract`는 `null`이며 LLM이 초록 없이 판단해야 한다.
+- **초록 부재**: OpenAlex에 `abstract_inverted_index`가 없는 레코드가 존재한다. 이 경우 `abstract`는 `null`이며 LLM이 초록 없이 판단해야 한다. 더 앞선 문제는 검색 재현율이다. `search`는 제목·초록·전문을 훑으므로 초록이 없는 레코드는 색인 대상이 제목뿐이고, 제목에 없는 전문 용어로 질의하면 후보에 아예 오르지 않는다. EUROCRYPT 2026의 `Deep Neural Cryptography`가 실제로 그랬다. `cryptanalysis`, `distinguisher` 같은 용어로는 어떤 연도 조건에서도 잡히지 않았고, 제목 단어를 쓰고 연도를 2026으로 좁히자 2위로 올라왔다. 연도를 좁힌 짧고 일반적인 질의를 함께 쓰도록 Tool 설명에 명시한다.
 - **저장 시점 지표의 고정**: `papers`에 저장된 인용수는 저장 시점 값이다. 시간이 지나면 실제 값과 벌어지며, 갱신하려면 `save_papers`를 다시 호출해야 한다.
 - **OpenAlex 응답 필드 누락**: `primary_location`이나 `authorships`가 비어 있는 레코드가 있어 `venue`, `authors`가 빈 값일 수 있다.
