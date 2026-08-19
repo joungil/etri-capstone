@@ -32,22 +32,25 @@
 ## User flow
 
 1. 사용자가 연구 질문을 제시한다.
-2. LLM이 `search_papers`로 후보 논문을 탐색한다. 특정 논문을 제목으로 찾을 때는 `search_papers_by_title`을 쓴다.
+2. LLM이 `search_papers`로 후보 논문을 탐색한다. 어떤 용어로 불리는 주제인지 모를 때는 `search_papers_by_meaning`으로 의미가 가까운 논문을 함께 찾는다. 특정 논문을 제목으로 찾을 때는 `search_papers_by_title`을 쓴다.
 3. 필요하면 `get_paper_details`로 초록·인용수·저널·오픈액세스 여부를 확인한다.
 4. LLM이 선별한 논문을 `save_papers`로 저장한다.
 5. `compare_papers`로 저장된 논문의 지표 표와 집계를 받는다.
 6. LLM이 지표를 해석해 주장별 근거와 출처를 갖춘 리포트를 구성하고 `save_report`로 저장한다.
-7. 이후 `list_reports`, `load_report`, `delete_report`로 리포트를 재활용하거나 정리한다.
+7. 필요하면 `export_report`로 리포트를 마크다운 파일로 내보낸다.
+8. 이후 `list_reports`, `load_report`, `delete_report`로 리포트를 재활용하거나 정리한다.
 
 ## Functional requirements
 
 - **FR1** OpenAlex 검색은 연구 주제 질의를 받고 발행 연도 범위, 최소 인용수, 오픈액세스 여부로 후보를 좁힐 수 있어야 한다. 정렬은 관련도·인용수·최신순 중에서 선택한다.
+- **FR1a** 질의와 같은 단어를 쓰지 않은 논문도 찾을 수 있도록, 의미 기반 검색을 별도 Tool로 제공한다. 어휘 검색과 계약이 다르므로(정렬·최소 인용수 미지원, 후보군 상한) 같은 Tool에 모드로 합치지 않는다.
 - **FR2** 단일 논문의 초록을 포함한 상세 정보를 조회할 수 있어야 한다.
 - **FR3** 비교는 저장된 논문을 대상으로 하며, 논문별 지표 행과 전체 집계를 결정적으로 산출한다. Server는 해석 문장을 생성하지 않는다.
 - **FR4** 리포트는 주장(claim)마다 출처 논문이 연결되어야 저장된다. 근거 없는 리포트는 저장할 수 없다.
 - **FR5** 참고 논문과 리포트는 각각 저장·목록 조회·불러오기·삭제가 가능해야 한다.
 - **FR6** 모든 데이터는 SQLite 파일에 보존되어 Server를 재시작해도 유지된다.
 - **FR7** 리포트를 삭제해도 참고 논문은 보존되어 다른 리포트에서 계속 사용할 수 있다.
+- **FR8** 저장된 리포트를 사람이 읽을 수 있는 마크다운 파일로 내보낼 수 있어야 한다. 한 리포트는 항상 같은 파일에 쓰며, 다시 내보내면 덮어쓴다. 한 파일에 여러 리포트를 누적하지 않는다.
 
 ## Tool contracts
 
@@ -59,9 +62,23 @@
 |---|---|---|
 | `search_papers_by_title` | `title: str`, `limit: int = 5` | `query`, `count`, `papers[]` |
 | `search_papers` | `query: str`, `from_year: int \| None`, `to_year: int \| None`, `min_citations: int \| None`, `open_access_only: bool = False`, `sort: str = "relevance"`, `limit: int = 5` | `query`, `filters`, `sort`, `count`, `papers[]` |
+| `search_papers_by_meaning` | `query: str`, `from_year: int \| None`, `to_year: int \| None`, `open_access_only: bool = False`, `limit: int = 5` | `query`, `filters`, `count`, `papers[]` |
 | `get_paper_details` | `openalex_id: str` | `paper` (초록 포함) |
 
 `sort`는 `relevance` / `citations` / `recency`만 허용한다. 기본값은 `relevance`다.
+
+`search_papers`는 OpenAlex `search` 파라미터를, `search_papers_by_meaning`은 `search.semantic` 파라미터를 사용한다. 두 Tool의 계약 차이는 OpenAlex가 의미 검색에 거는 제약에서 온다.
+
+| 항목 | `search_papers` | `search_papers_by_meaning` |
+|---|---|---|
+| 매칭 방식 | 제목·초록·전문의 단어 일치 | 임베딩 유사도 |
+| `min_citations` | 지원 | **미지원** (OpenAlex가 `cited_by_count` 필터를 거부한다) |
+| `sort` | 지원 | **미지원** (값을 넘겨도 무시되므로 파라미터로 받지 않는다) |
+| 후보군 | 조건에 맞는 전체 | 유사도 상위 50건. `limit`을 키워도 그 이상 나오지 않는다 |
+| 호출 빈도 | 제한 없음 | **초당 1회** |
+| 안정성 | 안정 | OpenAlex 베타. 간헐적 `504` 발생 |
+
+의미 검색이 받아들이는 필터는 `publication_year`, `open_access.is_oa`, `is_oa`, `type`, `language`, `has_abstract`, `has_fulltext`, `is_retracted`, `author.id`, `authorships.author.id`, `authorships.institutions.id`, `institution.id`, `institutions.id`, `funders.id`, `primary_location.license`, `primary_location.source.id`다. 이 Tool은 이 중 발행 연도와 오픈액세스 여부만 노출한다.
 
 `papers[]` 항목의 필드: `openalex_id`, `title`, `publication_year`, `authors[]`, `doi`, `venue`, `cited_by_count`, `is_open_access`, `landing_page_url`. `get_paper_details`는 여기에 `abstract`를 더한다.
 
@@ -93,6 +110,7 @@
 | `save_report` | `title: str`, `research_question: str`, `summary: str`, `findings: list[dict]` | `report_id`, `finding_count`, `paper_count` |
 | `list_reports` | `limit: int = 20` | `count`, `reports[]` |
 | `load_report` | `report_id: int` | `report`, `findings[]`, `papers[]` |
+| `export_report` | `report_id: int` | `exported: bool`, `path`, `finding_count`, `paper_count` |
 | `delete_report` | `report_id: int` | `deleted: bool`, `deleted_findings` |
 
 `findings[]` 각 항목: `claim: str` (필수), `evidence: str` (선택), `paper_openalex_id: str` (필수).
@@ -111,6 +129,14 @@ report_findings(id PK, report_id -> reports(id) ON DELETE CASCADE,
                 position, claim, evidence, paper_openalex_id -> papers(openalex_id))
 ```
 
+내보낸 마크다운 파일의 폴더는 환경변수 `REPORT_EXPORT_DIR`로 지정하며, 기본값은 저장소 루트의 `reports`다. 파일 이름은 `report-<report_id>.md`로 고정해 같은 리포트가 항상 같은 파일에 대응하게 한다. 이 파일은 SQLite에 있는 내용을 사람이 읽기 좋게 옮긴 사본이며 원본이 아니다.
+
+`delete_report`는 이 파일을 지우지 않는다. 리포트를 지우면 본문이 DB에서 사라지므로 파일이 마지막 사본이 되고, `reports.id`가 `AUTOINCREMENT`라 같은 이름이 다른 리포트에 재사용되지도 않는다. 파일 정리는 사용자의 몫으로 남긴다.
+
+표에 들어가는 제목과 저자는 `|`를 문자 참조 `&#124;`로 바꾸고, 값에 있던 백슬래시를 이스케이프하고, 줄바꿈을 공백으로 바꾼 뒤 넣는다. 구분자가 값에 섞이면 열이 밀리거나 행이 쪼개지기 때문이다.
+
+`|`를 백슬래시로 이스케이프하지 않는 이유는 값에 이미 백슬래시가 있을 때(수식 표기의 `\|` 등) `\\|`가 되어 백슬래시끼리 이스케이프를 소진하고 `|`가 다시 칸 구분자로 살아나기 때문이다. 문자 참조로 바꾸면 칸 값에 `|`가 남지 않아, 표 행의 `|`는 모두 칸 구분자라고 단정할 수 있다. 값의 백슬래시를 이스케이프하는 것은 그다음 문제로, 그대로 두면 뒤따르는 문자 참조의 `&`를 이스케이프해 `&#124;`가 글자 그대로 보인다.
+
 `report_findings`가 리포트↔논문 N:M 연결과 주장–출처 매핑을 동시에 표현한다. 리포트의 참고 논문 목록은 이 테이블에서 유도하며, 같은 사실을 저장하는 별도 연결 테이블은 두지 않는다.
 
 제약 사항:
@@ -128,7 +154,7 @@ Tool은 예외를 밖으로 던지지 않는다. 아래 상황을 `error` 메시
 |---|---|
 | 검색어가 비어 있음 | `error`와 빈 `papers[]` |
 | OpenAlex HTTP 오류 | 상태 코드를 담은 `error` |
-| OpenAlex 요청 한도 초과(429) | 재시도해도 소용없으므로 `Retry-After` 기반 대기 시간을 담은 `error`. 키가 없으면 `OPENALEX_API_KEY` 설정을 함께 안내한다 |
+| OpenAlex 요청 한도 초과(429) | `Retry-After` 기반 대기 시간을 담은 `error`. 대기가 1분 이상이면 크레딧 소진이므로 키가 없을 때 `OPENALEX_API_KEY` 설정을 함께 안내한다. 대기가 1분 미만이면 의미 검색의 초당 1회 제한이며, 키와 무관하므로 안내를 덧붙이지 않고 초 단위로 알린다 |
 | OpenAlex 연결 실패 | 사유를 담은 `error` |
 | OpenAlex 응답 수신·해석 실패 | 본문을 읽는 도중의 타임아웃과 JSON이 아닌 본문도 `error`로 변환한다 |
 | SQLite 접근 실패 | 경로 오설정·잠금 등으로 저장소가 실패하면 Tool 경계에서 잡아 `error`로 변환한다 |
@@ -139,17 +165,21 @@ Tool은 예외를 밖으로 던지지 않는다. 아래 상황을 `error` 메시
 | `findings`가 미저장 논문을 참조 | `error` + `missing_ids[]` (먼저 `save_papers` 호출 유도) |
 | 존재하지 않는 `report_id` | `error` |
 | 참조 중인 논문 삭제 시도 | `error` + `referenced_by[]` |
+| 리포트 파일 쓰기 실패 | 폴더 생성이나 쓰기가 실패하면 `error` + `exported: false` |
+| 존재하지 않는 리포트 내보내기 | `error` + `exported: false` |
 
 ## Completion criteria
 
 1. `search_papers`가 연도·인용수·오픈액세스 필터와 세 가지 정렬을 적용해 결과를 반환한다.
-2. `get_paper_details`가 초록을 복원해 반환한다.
-3. `save_papers` → `compare_papers`가 지표 행과 집계를 반환한다.
-4. `findings`가 비어 있거나 미저장 논문을 참조하는 `save_report`가 거부된다.
-5. 정상 `save_report` 이후 `list_reports`·`load_report`가 근거와 출처를 포함해 리포트를 재현한다.
-6. `delete_report` 후 리포트와 findings는 사라지고 `papers`는 남는다.
-7. Server 재시작 후에도 저장된 데이터가 유지된다.
-8. `server.py`가 stdio로 오류 없이 기동하고 Tool 목록이 노출된다.
+2. `search_papers_by_meaning`이 질의 단어를 포함하지 않는 논문을 결과에 포함하고, 연도·오픈액세스 필터를 적용한다.
+3. `get_paper_details`가 초록을 복원해 반환한다.
+4. `save_papers` → `compare_papers`가 지표 행과 집계를 반환한다.
+5. `findings`가 비어 있거나 미저장 논문을 참조하는 `save_report`가 거부된다.
+6. 정상 `save_report` 이후 `list_reports`·`load_report`가 근거와 출처를 포함해 리포트를 재현한다.
+7. `delete_report` 후 리포트와 findings는 사라지고 `papers`는 남는다.
+8. Server 재시작 후에도 저장된 데이터가 유지된다.
+9. `export_report`가 마크다운 파일을 만들고, 같은 리포트를 다시 내보내면 내용이 누적되지 않고 같은 경로에 덮어쓰인다.
+10. `server.py`가 stdio로 오류 없이 기동하고 Tool 목록이 노출된다.
 
 ## Constraints
 
@@ -157,12 +187,13 @@ Tool은 예외를 밖으로 던지지 않는다. 아래 상황을 `error` 메시
 - 의존성은 `mcp==2.0.0`만 사용한다. SQLite·HTTP·JSON은 표준 라이브러리(`sqlite3`, `urllib`, `json`)로 처리하며 `requirements.txt`에 추가하지 않는다.
 - 전송 방식은 stdio를 유지한다.
 - `OPENALEX_API_KEY`는 선택 사항이며, 없어도 검색이 동작해야 한다. 다만 무인증 한도가 낮아 실사용에서는 키 설정을 전제한다.
-- 코드는 역할별로 분리한다. `server.py`는 Tool 정의와 입출력 계약, `openalex.py`는 외부 통신, `storage.py`는 영속화를 담당한다.
+- 코드는 역할별로 분리한다. `server.py`는 Tool 정의와 입출력 계약, `openalex.py`는 외부 통신, `storage.py`는 영속화, `report_export.py`는 리포트의 마크다운 렌더링과 파일 쓰기를 담당한다.
 
 ## Assumptions
 
 - OpenAlex 공개 API는 인증 없이도 호출되지만 한도가 낮다. 실측한 무인증 한도는 하루 1,000 크레딧이고 검색 1회가 10 크레딧을 소비해, 한 세션의 탐색만으로도 소진되어 `429`와 약 22시간의 대기가 발생했다. `OPENALEX_API_KEY`를 설정하면 10,000 크레딧으로 올라간다. 따라서 실사용은 키가 있는 상태를 전제한다.
 - 아래 쿼리 문법은 실제 요청으로 확인했다: `filter=publication_year:2020-2024,cited_by_count:>50,open_access.is_oa:true`, `sort=cited_by_count:desc`, `select`에 `abstract_inverted_index` 포함.
+- 의미 검색의 제약도 실제 요청으로 확인했다. `search.semantic`은 `meta.count`가 항상 50으로 고정되고, `per_page`가 50을 넘으면 `400`, `cited_by_count` 필터도 `400`이다. `sort`는 존재하지 않는 값을 넘겨도 오류 없이 무시된다. 초당 2회 이상 호출하면 `429`에 `Retry-After: 1`이 실려 온다. 유효한 검색 파라미터 전체는 `search`, `search.semantic`, `search.exact`, `search.title`, `search.title.exact`, `search.title_and_abstract`, `search.title_and_abstract.exact`이며, 이는 잘못된 파라미터를 보냈을 때 OpenAlex가 반환한 목록이다.
 - 단일 사용자가 로컬에서 하나의 Server 프로세스를 사용한다.
 - 리포트 본문의 품질(주장이 근거에 실제로 부합하는지)은 LLM의 책임이며 Server는 구조적 요건만 강제한다.
 
@@ -170,5 +201,7 @@ Tool은 예외를 밖으로 던지지 않는다. 아래 상황을 `error` 메시
 
 - **인용수 정렬과 주제 적합성의 충돌**: `search` 질의에 `sort=cited_by_count:desc`를 함께 적용하면 인용수만 높고 주제와 무관한 논문이 상위에 오는 것을 확인했다. 기본 정렬을 관련도로 두고, 인용수 정렬은 필터로 후보군을 좁힌 뒤 쓰도록 Tool 설명에 명시한다.
 - **초록 부재**: OpenAlex에 `abstract_inverted_index`가 없는 레코드가 존재한다. 이 경우 `abstract`는 `null`이며 LLM이 초록 없이 판단해야 한다. 더 앞선 문제는 검색 재현율이다. `search`는 제목·초록·전문을 훑으므로 초록이 없는 레코드는 색인 대상이 제목뿐이고, 제목에 없는 전문 용어로 질의하면 후보에 아예 오르지 않는다. EUROCRYPT 2026의 `Deep Neural Cryptography`가 실제로 그랬다. `cryptanalysis`, `distinguisher` 같은 용어로는 어떤 연도 조건에서도 잡히지 않았고, 제목 단어를 쓰고 연도를 2026으로 좁히자 2위로 올라왔다. 연도를 좁힌 짧고 일반적인 질의를 함께 쓰도록 Tool 설명에 명시한다.
+- **의미 검색의 베타 상태**: OpenAlex는 `search.semantic`을 베타로 표기하고 민감한 프로덕션 워크플로에 쓰지 말라고 안내한다. 실제로 연도 필터를 건 요청 하나가 `504 query_timeout`으로 실패했다가 재시도에서 성공했다. 계약과 파라미터가 예고 없이 바뀔 수 있으므로 어휘 검색을 대체하지 않고 별도 Tool로 병행한다.
+- **의미 검색의 후보군 상한**: `search.semantic`은 유사도 상위 50건만 후보로 만든다. 넓은 주제에서는 관련 논문이 50건을 넘어도 그 이상 볼 수 없고, 연도·오픈액세스 필터는 이 50건을 만든 뒤가 아니라 만드는 과정에 적용되는지 확인하지 않았다. 재현율이 중요하면 질의를 바꿔 여러 번 호출하거나 `search_papers`를 함께 쓴다.
 - **저장 시점 지표의 고정**: `papers`에 저장된 인용수는 저장 시점 값이다. 시간이 지나면 실제 값과 벌어지며, 갱신하려면 `save_papers`를 다시 호출해야 한다.
 - **OpenAlex 응답 필드 누락**: `primary_location`이나 `authorships`가 비어 있는 레코드가 있어 `venue`, `authors`가 빈 값일 수 있다.

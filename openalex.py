@@ -55,18 +55,27 @@ def normalize_work_id(openalex_id: str) -> str | None:
 def _rate_limit_message(error: HTTPError) -> str:
     """429 응답에 재시도 시점과 해결책을 덧붙인다.
 
-    호출 측이 곧바로 재시도해도 소용없는 상황이므로 대기 시간을 함께 알린다.
+    OpenAlex의 429는 성격이 다른 두 가지다. 크레딧을 모두 쓴 경우는 대기가 길고
+    키를 설정하면 한도가 올라가지만, 의미 검색의 초당 1회 제한은 몇 초만 기다리면
+    풀리고 키와 무관하다. Retry-After가 1분 미만이면 후자로 보고 안내를 나눈다.
     """
+
+    retry_after = error.headers.get("Retry-After")
+    seconds = int(retry_after) if retry_after and retry_after.isdigit() else None
+
+    if seconds is not None and seconds < 60:
+        return (
+            f"OpenAlex 요청 빈도 제한에 걸렸습니다. 약 {max(1, seconds)}초 후에 "
+            "다시 시도할 수 있습니다."
+        )
 
     parts = ["OpenAlex 요청 한도를 초과했습니다."]
 
-    retry_after = error.headers.get("Retry-After")
-    if retry_after and retry_after.isdigit():
-        seconds = int(retry_after)
+    if seconds is not None:
         if seconds >= 3600:
             parts.append(f"약 {seconds / 3600:.1f}시간 후에 초기화됩니다.")
         else:
-            parts.append(f"약 {max(1, seconds // 60)}분 후에 초기화됩니다.")
+            parts.append(f"약 {seconds // 60}분 후에 초기화됩니다.")
 
     if not os.getenv("OPENALEX_API_KEY"):
         parts.append("OPENALEX_API_KEY를 설정하면 한도가 올라갑니다.")
@@ -187,6 +196,19 @@ def _build_filter(
     return ",".join(conditions)
 
 
+def _search(query: str, params: dict[str, Any]) -> dict[str, Any]:
+    """검색 요청을 보내고 검색 Tool이 공유하는 응답 모양으로 정규화한다."""
+
+    payload, error = _request(f"{WORKS_URL}?{urlencode(_with_api_key(params))}")
+    if error is not None:
+        return {"query": query, "error": error, "papers": []}
+
+    papers = [
+        _normalize_work(work) for work in (payload or {}).get("results", [])
+    ]
+    return {"query": query, "count": len(papers), "papers": papers}
+
+
 def search_works(
     query: str,
     *,
@@ -215,14 +237,35 @@ def search_works(
     if filter_expression:
         params["filter"] = filter_expression
 
-    payload, error = _request(f"{WORKS_URL}?{urlencode(_with_api_key(params))}")
-    if error is not None:
-        return {"query": query, "error": error, "papers": []}
+    return _search(query, params)
 
-    papers = [
-        _normalize_work(work) for work in (payload or {}).get("results", [])
-    ]
-    return {"query": query, "count": len(papers), "papers": papers}
+
+def search_works_by_meaning(
+    query: str,
+    *,
+    from_year: int | None = None,
+    to_year: int | None = None,
+    open_access_only: bool = False,
+    limit: int = DEFAULT_RESULT_LIMIT,
+) -> dict[str, Any]:
+    """질의의 의미와 가까운 OpenAlex 논문을 찾는다.
+
+    OpenAlex의 `search.semantic`은 임베딩 유사도로 상위 50건까지만 후보를 만들며,
+    최소 인용수 필터와 정렬을 받지 않는다. 그래서 이 함수는 두 조건을 인자로 두지
+    않는다. `_build_filter`에 min_citations를 넘기지 않는 것도 같은 이유다.
+    """
+
+    params: dict[str, Any] = {
+        "search.semantic": query,
+        "per_page": limit,
+        "select": LIST_FIELDS,
+    }
+
+    filter_expression = _build_filter(from_year, to_year, None, open_access_only)
+    if filter_expression:
+        params["filter"] = filter_expression
+
+    return _search(query, params)
 
 
 def get_work(openalex_id: str) -> dict[str, Any]:

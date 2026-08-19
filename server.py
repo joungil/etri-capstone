@@ -1,7 +1,8 @@
 """OpenAlex 기반 연구 지원 MCP Server.
 
 Tool의 입출력 계약과 검증만 담당한다. OpenAlex 통신은 openalex 모듈이,
-논문·리포트 보존은 storage 모듈이 책임진다.
+논문·리포트 보존은 storage 모듈이, 리포트의 마크다운 내보내기는 report_export
+모듈이 책임진다.
 
 Server는 결정적인 데이터 작업만 수행하고, 비교의 해석과 리포트 산문은 LLM이 작성한다.
 """
@@ -14,6 +15,7 @@ from typing import Any
 from mcp.server import MCPServer
 
 import openalex
+import report_export
 import storage
 
 
@@ -116,6 +118,9 @@ def search_papers(
 ) -> dict[str, Any]:
     """연구 주제나 키워드로 OpenAlex에서 논문 후보군을 탐색한다.
 
+    질의에 쓴 단어가 논문에 그대로 등장해야 잡힌다. 주제를 부르는 용어가
+    확실하지 않으면 search_papers_by_meaning을 함께 쓴다.
+
     sort를 citations로 두면 검색어와 무관하지만 인용수가 매우 높은 논문이
     상위에 올라올 수 있다. 먼저 from_year나 min_citations로 후보를 좁힌 뒤
     인용수 정렬을 쓰는 편이 안전하다.
@@ -165,6 +170,57 @@ def search_papers(
         "from_year": from_year,
         "to_year": to_year,
         "min_citations": min_citations,
+        "open_access_only": open_access_only,
+    }
+    return result
+
+
+@_tool
+def search_papers_by_meaning(
+    query: str,
+    from_year: int | None = None,
+    to_year: int | None = None,
+    open_access_only: bool = False,
+    limit: int = openalex.DEFAULT_RESULT_LIMIT,
+) -> dict[str, Any]:
+    """연구 질문의 의미로 OpenAlex 논문을 탐색한다.
+
+    질의와 같은 단어를 쓰지 않은 논문도 찾는다. 그 주제를 학계가 어떤 용어로
+    부르는지 모를 때, 또는 문장형 연구 질문을 그대로 던지고 싶을 때 쓴다.
+    search_papers와 결과가 크게 다를 수 있으므로 둘을 함께 쓰면 후보군이 넓어진다.
+
+    OpenAlex 베타 기능이라 제약이 있다. 후보는 유사도 상위 50건뿐이라 limit을
+    키워도 그 이상 나오지 않는다. 최소 인용수 조건과 정렬은 지원하지 않으므로,
+    인용수로 좁히거나 정렬해야 하면 search_papers를 쓴다. 호출은 초당 1회로
+    제한되니 여러 질의를 한꺼번에 던지지 말고 하나씩 보낸다.
+
+    Args:
+        query: 연구 질문이나 찾으려는 내용을 설명하는 문장. 키워드 나열보다
+            의미가 담긴 문장이 잘 맞는다.
+        from_year: 이 연도 이후(해당 연도 포함)에 발행된 논문만 찾는다.
+        to_year: 이 연도 이전(해당 연도 포함)에 발행된 논문만 찾는다.
+        open_access_only: True이면 오픈액세스 논문만 찾는다.
+        limit: 반환할 논문 수. 기본값은 5이며 최대 25이다.
+    """
+
+    normalized_query = query.strip()
+    if not normalized_query:
+        return {
+            "query": query,
+            "error": "찾으려는 내용을 문장으로 입력해 주세요.",
+            "papers": [],
+        }
+
+    result = openalex.search_works_by_meaning(
+        normalized_query,
+        from_year=from_year,
+        to_year=to_year,
+        open_access_only=open_access_only,
+        limit=_clamp(limit, 1, openalex.MAX_RESULT_LIMIT),
+    )
+    result["filters"] = {
+        "from_year": from_year,
+        "to_year": to_year,
         "open_access_only": open_access_only,
     }
     return result
@@ -489,8 +545,45 @@ def load_report(report_id: int) -> dict[str, Any]:
 
 
 @_tool
+def export_report(report_id: int) -> dict[str, Any]:
+    """저장된 리포트를 마크다운 파일로 내보낸다.
+
+    한 리포트는 항상 같은 파일에 쓴다. 다시 내보내면 이전 내용을 덮어쓰므로
+    한 파일에 여러 리포트가 쌓이지 않는다. 저장 폴더는 환경변수
+    REPORT_EXPORT_DIR로 바꿀 수 있고, 기본값은 저장소의 reports 폴더다.
+
+    Args:
+        report_id: 내보낼 리포트의 ID. list_reports에서 확인할 수 있다.
+    """
+
+    report = storage.get_report(report_id)
+    if report is None:
+        return {"error": f"{report_id}번 리포트를 찾지 못했습니다.", "exported": False}
+
+    try:
+        path = report_export.write(report)
+    except report_export.ExportError as error:
+        return {
+            "error": f"리포트 파일을 쓰지 못했습니다: {error}",
+            "exported": False,
+        }
+
+    return {
+        "exported": True,
+        "report_id": report_id,
+        "path": str(path),
+        "finding_count": len(report["findings"]),
+        "paper_count": len(report["papers"]),
+    }
+
+
+@_tool
 def delete_report(report_id: int) -> dict[str, Any]:
     """저장된 리포트를 삭제한다. 참고 논문은 다른 리포트에서 쓸 수 있도록 남긴다.
+
+    export_report로 내보낸 마크다운 파일은 지우지 않는다. 리포트를 지우면 본문이
+    DB에서 사라지므로 그 파일이 마지막 사본이 된다. 파일까지 정리하려면 직접
+    지워야 한다.
 
     Args:
         report_id: 삭제할 리포트의 ID.
