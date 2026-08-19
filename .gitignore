@@ -1,5 +1,6 @@
 .venv/
 .env
+.mcp.json
 __pycache__/
 *.pyc
 *.db

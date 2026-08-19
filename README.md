@@ -24,11 +24,20 @@ MCP Server를 직접 구현하여 LLM이 논문을 찾고 분석·비교하며, 
 → 저장된 리포트 목록 조회·불러오기·삭제
 ```
 
-## 참고 구현
+## 구현
 
-이 저장소에는 Python으로 실행하는 가장 기본적인 MCP Server가 포함되어 있다.
+Server는 결정적인 데이터 작업만 담당한다. OpenAlex 검색과 상세 조회, 비교용 지표 계산, SQLite 보존까지가 Server의 몫이고, 비교 결과의 해석과 리포트 산문은 LLM이 작성해 Server에 넘겨 저장한다.
 
-참고 Tool은 입력받은 논문명을 OpenAlex에서 검색하고, 검색된 논문의 제목·발행 연도·저자·DOI·OpenAlex 주소를 반환한다. 이 코드는 MCP Server의 선언, Tool 등록, OpenAlex 요청과 `stdio` 구동 구조를 확인하기 위한 참고 구현이다.
+역할별로 파일을 나눴다.
+
+```text
+server.py      Tool 정의와 입출력 검증
+openalex.py    OpenAlex API 통신과 응답 정규화
+storage.py     SQLite 스키마와 논문·리포트 보존
+verify_flow.py 전체 흐름을 한 번 실행해 보는 수동 검증 스크립트
+```
+
+상세한 요구사항과 계약은 `SPEC.md`에 정리되어 있다.
 
 ## 준비
 
@@ -75,15 +84,93 @@ Windows PowerShell:
 
 MCP Host는 위 명령으로 Server를 실행하고 표준 입력과 표준 출력을 통해 통신한다.
 
-## 제공 Tool
+## MCP Host 연결
 
-```text
-search_papers_by_title
+저장소 루트에 `.mcp.json`을 만들면 Host가 이 Server를 붙인다. 경로는 각자의 환경에 맞춰야 하므로 이 파일은 저장소에 포함하지 않는다.
+
+```json
+{
+  "mcpServers": {
+    "openalex-research": {
+      "command": "/절대경로/etri-capstone/.venv/bin/python",
+      "args": ["/절대경로/etri-capstone/server.py"],
+      "env": {
+        "OPENALEX_API_KEY": "<발급받은 키>"
+      }
+    }
+  }
+}
 ```
 
-입력한 논문명을 OpenAlex에서 검색하고 관련 논문 목록을 반환한다.
+Windows에서는 경로 구분자를 `\\`로 쓰고 인터프리터는 `.venv\\Scripts\\python.exe`를 가리킨다.
 
-OpenAlex API 키가 있다면 실행 환경의 `OPENALEX_API_KEY` 값으로 전달할 수 있다. 기본적인 검색은 API 키 없이도 실행할 수 있다.
+`env.OPENALEX_API_KEY`는 형식상 선택 사항이지만 실질적으로는 넣는 편이 좋다. 키 없이 호출하면 하루 1,000 크레딧(검색 1회당 10 크레딧)을 공유하는 무인증 한도가 적용되어, 조금만 검색해도 `HTTP 429`가 나고 리셋까지 하루 가까이 기다려야 한다. 키를 넣으면 한도가 10,000 크레딧으로 올라간다.
+
+키는 저장소에 커밋하지 않는다. `.mcp.json`은 `.gitignore`에 등록되어 있어 위 내용을 그대로 채워도 추적되지 않지만, 문서나 이슈에 붙여넣을 때는 값을 가린다. 키를 파일에 두고 싶지 않으면 `env` 항목을 빼고 셸 환경변수 `OPENALEX_API_KEY`로 지정해도 된다.
+
+파일을 만든 뒤 Host를 재시작하고, 연결 상태와 Tool 목록이 노출되는지 확인한다. 이미 붙어 있는 Server 프로세스는 기동 시점의 환경변수를 그대로 쓰므로, `env`를 바꿨다면 Host를 다시 시작해야 반영된다.
+
+## 제공 Tool
+
+### 검색과 조회
+
+| Tool | 설명 |
+|---|---|
+| `search_papers_by_title` | 제목을 알고 있는 특정 논문을 찾는다 |
+| `search_papers` | 연구 주제로 후보군을 탐색한다. 발행 연도·최소 인용수·오픈액세스 필터와 관련도/인용수/최신순 정렬을 지원한다 |
+| `get_paper_details` | 논문 한 편의 초록·인용수·저널·오픈액세스 여부를 조회한다 |
+
+### 비교
+
+| Tool | 설명 |
+|---|---|
+| `compare_papers` | 저장된 논문의 지표를 한 표로 모으고 연도 범위·인용수·오픈액세스 비율을 집계한다. 해석 문장은 만들지 않는다 |
+
+### 참고 논문
+
+| Tool | 설명 |
+|---|---|
+| `save_papers` | 참고 논문을 초록까지 함께 저장한다. 이미 저장된 논문은 최신 정보로 갱신한다 |
+| `list_saved_papers` | 저장된 참고 논문 목록을 조회한다 |
+| `delete_saved_paper` | 참고 논문을 삭제한다. 리포트가 근거로 쓰고 있으면 거부한다 |
+
+### 리포트
+
+| Tool | 설명 |
+|---|---|
+| `save_report` | 주장마다 출처 논문을 연결한 리포트를 저장한다. 근거가 없거나 저장되지 않은 논문을 가리키면 거부한다 |
+| `list_reports` | 저장된 리포트 목록을 조회한다 |
+| `load_report` | 리포트를 본문·근거·참고 논문과 함께 불러온다 |
+| `delete_report` | 리포트를 삭제한다. 참고 논문은 남긴다 |
+
+## 환경 변수
+
+| 변수 | 설명 |
+|---|---|
+| `OPENALEX_API_KEY` | 선택 사항. 없어도 검색은 동작하지만 무인증 한도(하루 1,000 크레딧)에 걸려 `HTTP 429`가 나기 쉽다. 키를 넣으면 10,000 크레딧으로 올라간다 |
+| `RESEARCH_DB_PATH` | 선택 사항. SQLite 파일 경로. 기본값은 저장소의 `research.db` |
+
+## 동작 검증
+
+Tool을 순서대로 호출해 검색부터 삭제까지 전체 흐름을 확인한다. 임시 DB를 사용하므로 `research.db`는 건드리지 않는다.
+
+```bash
+python verify_flow.py
+```
+
+Windows PowerShell:
+
+```powershell
+.\.venv\Scripts\python.exe verify_flow.py
+```
+
+종료 코드로 결과를 구분한다.
+
+| 코드 | 의미 |
+|---|---|
+| 0 | 모든 단계 통과 |
+| 1 | 실패한 단계가 있음 |
+| 2 | 실행한 단계는 통과했으나 OpenAlex 호출 실패로 검색·상세조회·저장이 미검증 |
 
 ## 프로젝트 스킬
 
